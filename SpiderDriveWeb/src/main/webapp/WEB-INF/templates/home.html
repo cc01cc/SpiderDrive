@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户页</title>
+</head>
+
+<body>
+    <h1>用户页</h1>
+
+    <div>
+
+        <span>已用空间：</span><span th:text=${user_room_used}></span>
+        <br/>
+        <span>可用空间：</span><span th:text=${user_room_total}></span>
+
+    </div>
+
+    <div>
+        <span th:each="pwd,pwdStat:${pwd_list}">
+            <a th:href="@{/dir_forward(dir_context_id=${pwd.dirId})}">
+                <span th:text=${pwd.dirName}></span>
+            </a>
+            <!-- 使用 ${''} 可以表示文本 -->
+            <span th:text=${'>'}></span>
+        </span>
+    </div>
+
+    <div>
+        <form th:action="@{/file_upload}" method="post" id="file-upload-form" enctype="multipart/form-data">
+            <!-- <form> -->
+            <input type="file" name="file-context" id="input-file-context-01" class="form-component"
+                th:placeholder="请选择本地文件">
+            <button type="submit" id="button-file-upload-01" disabled="disabled">上传文件</button>
+            <br />
+            <p id="file-content-md5" th:text="${file_upload_info}"></p>
+        </form>
+        <!-- TODO : 区别 action="#" action="@{/dir_make}" 和 action="dir_make" 差异 -->
+        <form th:action="@{/dir_make}" method="post" id="dir-make-form">
+            <input type="text" name="dir-name" id="input-dir-name-01" class="form-component" th:placeholder="请输入目录名称">
+            <button type="submit" id="button-dir-make-01">新建目录</button>
+            <br />
+            <p th:text="${dir_make_info}"></p>
+        </form>
+
+
+        <!-- 文件显示区域 -->
+        <div class="file-list">
+
+            <div class="file-list-head">
+                <h3>文件列表</h3>
+            </div>
+
+            <div class="file-list-content">
+                <table>
+                    <thead>
+                        <tr>
+                            <td>序列</td>
+                            <td>文件名</td>
+                            <td>分享码</td>
+                            <!-- <td>下载</td>
+                            <td>删除</td> -->
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="file,fileStat:${file_list}">
+                            <td><span th:text="${fileStat.count}"></span></td>
+                            <td><span th:text="${file.fileName}"></span></td>
+                            <td><a th:href="@{/file-share(file_context_id=${file.fileId})}"
+                                    th:text="(${file.fileSharePassword}==null)?${'生成'}:${file.fileSharePassword}"
+                                    name="file_share_password"></a></td>
+                            <td><a th:href="@{/file-download(file_context_id=${file.fileId})}"><span
+                                        th:text="下载"></span></a></td>
+                            <td><a th:href="@{/file-delete(file_context_id=${file.fileId})}"><span
+                                        th:text="删除"></span></a></td>
+                            <td>
+                                <form th:action="@{/file_name_update(file_context_id=${file.fileId})}" method="post">
+                                    <input type="text" name="new_file_name">
+                                    <button type="submit">更名</button>
+                                </form>
+                                <!-- <input type="text" name="new_file_name">
+                                <a th:href="@{/file_name_update(file_context_id=${file.fileId})}">
+                                    <span th:text="改名"></span>
+                                </a> -->
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+
+        <!-- 目录显示区域 -->
+        <div class="dir-list">
+
+            <div class="dir-list-head">
+                <h3>目录列表</h3>
+            </div>
+
+            <div class="dir-list-content">
+                <table>
+                    <thead>
+                        <tr>
+                            <td>序列</td>
+                            <td>目录</td>
+                            <!-- <td>删除</td> -->
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="dir,dirStat:${dir_list}">
+                            <td><span th:text="${dirStat.count}"></span></td>
+                            <td><a th:href="@{/dir_forward(dir_context_id=${dir.dirId})}"><span
+                                        th:text="${dir.dirName}"></span></a></td>
+                            <td><a th:href="@{/dir-delete(dir_context_id=${dir.dirId})}"><span th:text="删除"></span></a>
+                            </td>
+                            <td>
+                                <form th:action="@{/dir_name_update(dir_context_id=${dir.dirId})}" method="post">
+                                    <input type="text" name="new_dir_name">
+                                    <button type="submit">更名</button>
+                                </form>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.bootcdn.net/ajax/libs/spark-md5/3.0.0/spark-md5.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script>
+        // Thank satazor, src changed from https://github.com/satazor/js-spark-md5
+        var file_context_md5 = document.getElementById('file-content-md5');
+        var file_size;
+        document.getElementById('input-file-context-01').addEventListener('change', function () {
+            file_context_md5.innerHTML = 'Hmm..Reading file...'
+            var blobSlice = File.prototype.slice || File.prototype.mozSlice || File.prototype.webkitSlice,
+                file = this.files[0],
+                file_size = file.size,
+                chunkSize = 2097152,                             // Read in chunks of 2MB
+                chunks = Math.ceil(file.size / chunkSize),
+                currentChunk = 0,
+                spark = new SparkMD5.ArrayBuffer(),
+                fileReader = new FileReader();
+
+            fileReader.onload = function (e) {
+                console.log('read chunk nr', currentChunk + 1, 'of', chunks);
+                file_context_md5.innerHTML = 'read chunk nr ' + currentChunk + ' of ' + chunks;
+                spark.append(e.target.result);                   // Append array buffer
+                currentChunk++;
+
+                if (currentChunk < chunks) {
+                    loadNext();
+                } else {
+                    console.log('finished loading');
+                    var md5 = spark.end()
+                    console.info('computed hash', md5);  // Compute hash
+                    file_context_md5.innerHTML = md5;
+
+                    // var true_str = "true";
+
+                    $.ajax({
+                        url: './home/upload-md5-front',
+                        dataType: "json",
+                        type: 'post',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ "md5": md5, "file_size": file_size }),
+                        success: function (data) {
+                            console.log(data);
+                            // TODO 这儿传参需要处理
+                            if (data!=null) {
+                                document.getElementById("button-file-upload-01").disabled = false;
+                            }else{
+                                file_context_md5.innerHTML = 'oops, something went wrong.(Check the capacity!)'
+                            }
+                        },
+                        error: function () {
+                            file_context_md5.innerHTML = 'oops, something went wrong.'
+                        }
+                    })
+                }
+            };
+
+            fileReader.onerror = function () {
+                console.warn('oops, something went wrong.');
+                file_context_md5.innerHTML = 'oops, something went wrong.'
+            };
+
+            function loadNext() {
+                var start = currentChunk * chunkSize,
+                    end = ((start + chunkSize) >= file.size) ? file.size : start + chunkSize;
+                fileReader.readAsArrayBuffer(blobSlice.call(file, start, end));
+            }
+
+            loadNext();
+        });
+
+    </script>
+
+</body>
+
+</html>
